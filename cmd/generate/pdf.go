@@ -1,4 +1,4 @@
-package main
+package generate
 
 import (
 	"fmt"
@@ -11,16 +11,17 @@ import (
 )
 
 const (
-	quantityColumnOffset = 360
-	rateColumnOffset     = 405
+	quantityColumnOffset = 350
+	rateColumnOffset     = 395
 	amountColumnOffset   = 480
 )
 
 const (
-	subtotalLabel = "Subtotal"
-	discountLabel = "Discount"
-	taxLabel      = "Tax"
-	totalLabel    = "Total"
+	discountLabel        = "Discount"
+	foreignExchangeLabel = "Foreign Exchange"
+	subtotalLabel        = "Subtotal"
+	taxLabel             = "Tax"
+	totalLabel           = "Total"
 )
 
 func writeLogo(pdf *gopdf.GoPdf, logo string, from string) {
@@ -72,7 +73,7 @@ func writeTitle(pdf *gopdf.GoPdf, title, id, date string) {
 func writeDueDate(pdf *gopdf.GoPdf, due string) {
 	_ = pdf.SetFont("Inter", "", 9)
 	pdf.SetTextColor(75, 75, 75)
-	pdf.SetX(rateColumnOffset)
+	pdf.SetX(quantityColumnOffset)
 	_ = pdf.Cell(nil, "Due Date")
 	pdf.SetTextColor(0, 0, 0)
 	_ = pdf.SetFontSize(11)
@@ -138,6 +139,7 @@ func writeNotes(pdf *gopdf.GoPdf, notes string) {
 
 	pdf.Br(48)
 }
+
 func writeFooter(pdf *gopdf.GoPdf, id string) {
 	pdf.SetY(800)
 
@@ -149,40 +151,50 @@ func writeFooter(pdf *gopdf.GoPdf, id string) {
 	pdf.Br(48)
 }
 
-func writeRow(pdf *gopdf.GoPdf, item string, quantity int, rate float64) {
+func writeRow(pdf *gopdf.GoPdf, item string, quantity float64, rate float64, currency string) {
 	_ = pdf.SetFont("Inter", "", 11)
 	pdf.SetTextColor(0, 0, 0)
 
 	total := float64(quantity) * rate
-	amount := strconv.FormatFloat(total, 'f', 2, 64)
 
 	_ = pdf.Cell(nil, item)
 	pdf.SetX(quantityColumnOffset)
-	_ = pdf.Cell(nil, strconv.Itoa(quantity))
+	_ = pdf.Cell(nil, strconv.FormatFloat(quantity, 'f', 2, 64))
 	pdf.SetX(rateColumnOffset)
-	_ = pdf.Cell(nil, currencySymbols[file.Currency]+strconv.FormatFloat(rate, 'f', 2, 64))
+	_ = pdf.Cell(nil, formatAmount(rate, currency))
 	pdf.SetX(amountColumnOffset)
-	_ = pdf.Cell(nil, currencySymbols[file.Currency]+amount)
+	_ = pdf.Cell(nil, formatAmount(total, currency))
 	pdf.Br(24)
 }
 
-func writeTotals(pdf *gopdf.GoPdf, subtotal float64, tax float64, discount float64) {
+func writeTotals(
+	pdf *gopdf.GoPdf,
+	subtotal, tax, discount, foreignExchange float64,
+	currency string,
+	forexCurrency string,
+) {
 	pdf.SetY(600)
 
-	writeTotal(pdf, subtotalLabel, subtotal)
+	writeTotal(pdf, subtotalLabel, subtotal, currency)
 	if tax > 0 {
-		writeTotal(pdf, taxLabel, tax)
+		writeTotal(pdf, taxLabel, tax, currency)
 	}
+
 	if discount > 0 {
-		writeTotal(pdf, discountLabel, discount)
+		writeTotal(pdf, discountLabel, discount, currency)
 	}
-	writeTotal(pdf, totalLabel, subtotal+tax-discount)
+
+	if foreignExchange > 0 {
+		writeForex(pdf, foreignExchangeLabel, foreignExchange, forexCurrency)
+	}
+
+	writeTotal(pdf, totalLabel, (subtotal+tax-discount)*foreignExchange, forexCurrency)
 }
 
-func writeTotal(pdf *gopdf.GoPdf, label string, total float64) {
+func writeTotal(pdf *gopdf.GoPdf, label string, total float64, currency string) {
 	_ = pdf.SetFont("Inter", "", 9)
 	pdf.SetTextColor(75, 75, 75)
-	pdf.SetX(rateColumnOffset)
+	pdf.SetX(quantityColumnOffset)
 	_ = pdf.Cell(nil, label)
 	pdf.SetTextColor(0, 0, 0)
 	_ = pdf.SetFontSize(12)
@@ -190,8 +202,39 @@ func writeTotal(pdf *gopdf.GoPdf, label string, total float64) {
 	if label == totalLabel {
 		_ = pdf.SetFont("Inter-Bold", "", 11.5)
 	}
-	_ = pdf.Cell(nil, currencySymbols[file.Currency]+strconv.FormatFloat(total, 'f', 2, 64))
+	_ = pdf.Cell(nil, formatAmount(total, currency))
 	pdf.Br(24)
+}
+
+func writeForex(pdf *gopdf.GoPdf, label string, total float64, currency string) {
+	_ = pdf.SetFont("Inter", "", 9)
+	pdf.SetTextColor(75, 75, 75)
+	pdf.SetX(quantityColumnOffset)
+	_ = pdf.Cell(nil, label)
+	pdf.SetTextColor(0, 0, 0)
+	_ = pdf.SetFontSize(12)
+	pdf.SetX(amountColumnOffset - 15)
+
+	_ = pdf.Cell(nil, formatHPAmount(total, currency))
+	pdf.Br(24)
+}
+
+func formatHPAmount(amount float64, currency string) string {
+	return fmt.Sprintf(
+		"%s%s %s",
+		currencySymbols[currency],
+		strconv.FormatFloat(amount, 'f', 5, 64),
+		currency,
+	)
+}
+
+func formatAmount(amount float64, currency string) string {
+	return fmt.Sprintf(
+		"%s%s %s",
+		currencySymbols[currency],
+		strconv.FormatFloat(amount, 'f', 2, 64),
+		currency,
+	)
 }
 
 func getImageDimension(imagePath string) (int, int) {

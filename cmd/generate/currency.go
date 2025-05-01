@@ -1,7 +1,8 @@
-package main
+package generate
 
 var currencySymbols = map[string]string{
 	"USD": "$",
+	"NZD": "$",
 	"EUR": "€",
 	"GBP": "£",
 	"JPY": "¥",
